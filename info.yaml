@@ -1,51 +1,47 @@
 # Tiny Tapeout project information
 project:
-  title:        ""      # Project title
-  author:       ""      # Your name
-  discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  ""      # One line description of what your project does
-  language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
-  clock_hz:     0       # Clock frequency in Hz (or 0 if not applicable)
+  title:       "(IEEE) USP OpenSilicio Didactic Testchip"
+  author:      "USP OpenSilicio Group (IEEE)"
+  discord:     ""
+  description: "Didactic chip for teaching CMOS design at USP. Three modules: a 7-gate logic library, an 11-stage SKY130 ring oscillator with analog output, and a phase-frequency detector (PFD)."
+  language:    "Verilog"
+  clock_hz:    0       # Design is fully asynchronous (no board clock used)
 
-  # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "1x1"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  # A single tile is about 167x108 uM.
+  tiles: "1x1"
 
-  # Your top module name must start with "tt_um_". Make it unique by including your github username:
-  top_module:  "tt_um_example"
+  top_module: "tt_um_usp_didactic"
 
-  # List your project's source files here.
-  # Source files must be in ./src and you must list each source file separately, one per line.
-  # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
     - "project.v"
 
-# The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
-# This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
+# The pinout of your project. Leave unused pins blank.
+# This section is for the datasheet/website.
 pinout:
   # Inputs
-  ui[0]: ""
-  ui[1]: ""
-  ui[2]: ""
-  ui[3]: ""
-  ui[4]: ""
-  ui[5]: ""
-  ui[6]: ""
-  ui[7]: ""
+  ui[0]: "clk_ref — PFD reference clock input"
+  ui[1]: "clk_vco — PFD VCO clock input"
+  ui[2]: "gate_sel[0] — logic gate selector bit 0"
+  ui[3]: "gate_sel[1] — logic gate selector bit 1"
+  ui[4]: "gate_sel[2] — logic gate selector bit 2"
+  ui[5]: "A — logic gate input A"
+  ui[6]: "B — logic gate input B"
+  ui[7]: "ring_osc_enable — enable ring oscillator (active high)"
 
   # Outputs
-  uo[0]: ""
-  uo[1]: ""
-  uo[2]: ""
-  uo[3]: ""
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  uo[0]: "selected gate output (mux of 7 gates via gate_sel)"
+  uo[1]: "NOT(A)"
+  uo[2]: "AND(A,B)"
+  uo[3]: "OR(A,B)"
+  uo[4]: "XOR(A,B)"
+  uo[5]: "NAND(A,B)"
+  uo[6]: "NOR(A,B)"
+  uo[7]: "XNOR(A,B)"
 
   # Bidirectional pins
-  uio[0]: ""
-  uio[1]: ""
-  uio[2]: ""
+  uio[0]: "UP — PFD up signal (output)"
+  uio[1]: "DOWN — PFD down signal (output)"
+  uio[2]: "ring_osc /1024 — divided ring oscillator output (output)"
   uio[3]: ""
   uio[4]: ""
   uio[5]: ""

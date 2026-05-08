@@ -1,40 +1,109 @@
-# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
+# SPDX-FileCopyrightText: 2025 USP OpenSilicio Group (IEEE)
 # SPDX-License-Identifier: Apache-2.0
+#
+# Cocotb testbench for tt_um_usp_didactic
+# Covers: Logic Gate Library, PFD ref-leads, PFD VCO-leads
+#
+# Run with:  cd test && make
 
 import cocotb
-from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import Timer
+
+
+def set_inputs(dut, A=0, B=0, sel=0, clk_ref=0, clk_vco=0, ring_en=0):
+    """Pack all inputs into the 8-bit ui_in bus."""
+    dut.ui_in.value = (
+        (clk_ref  & 0x1)       |
+        ((clk_vco & 0x1) << 1) |
+        ((sel     & 0x7) << 2) |
+        ((A       & 0x1) << 5) |
+        ((B       & 0x1) << 6) |
+        ((ring_en & 0x1) << 7)
+    )
 
 
 @cocotb.test()
-async def test_project(dut):
-    dut._log.info("Start")
+async def test_logic_gates(dut):
+    """Verify all 7 gates for every (A, B) input combination."""
 
-    # Set the clock period to 10 us (100 KHz)
-    clock = Clock(dut.clk, 10, unit="us")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut._log.info("Reset")
-    dut.ena.value = 1
-    dut.ui_in.value = 0
+    dut._log.info("Logic gate test - reset")
+    dut.rst_n.value  = 0
+    dut.ena.value    = 1
     dut.uio_in.value = 0
-    dut.rst_n.value = 0
-    await ClockCycles(dut.clk, 10)
+    set_inputs(dut)
+    await Timer(10, units='ns')
     dut.rst_n.value = 1
+    await Timer(2, units='ns')
 
-    dut._log.info("Test project behavior")
+    # Reference implementations for each gate (sel 0-6)
+    gate_fns = [
+        lambda a, b: int(not a),          # 0: NOT(A)
+        lambda a, b: a & b,               # 1: AND
+        lambda a, b: a | b,               # 2: OR
+        lambda a, b: a ^ b,               # 3: XOR
+        lambda a, b: int(not (a & b)),    # 4: NAND
+        lambda a, b: int(not (a | b)),    # 5: NOR
+        lambda a, b: int(not (a ^ b)),    # 6: XNOR
+    ]
 
-    # Set the input values you want to test
-    dut.ui_in.value = 20
-    dut.uio_in.value = 30
+    for A in [0, 1]:
+        for B in [0, 1]:
+            for sel, fn in enumerate(gate_fns):
+                set_inputs(dut, A=A, B=B, sel=sel)
+                await Timer(5, units='ns')
 
-    # Wait for one clock cycle to see the output values
-    await ClockCycles(dut.clk, 1)
+                got = int(dut.uo_out.value) & 0x1   # uo_out[0] = selected gate
+                exp = fn(A, B)
+                assert got == exp, (
+                    "Gate sel=%d A=%d B=%d: expected %d, got %d" % (sel, A, B, exp, got)
+                )
 
-    # The following assersion is just an example of how to check the output values.
-    # Change it to match the actual expected output of your module:
-    assert dut.uo_out.value == 50
+    dut._log.info("Logic gate test - PASSED")
 
-    # Keep testing the module by changing the input values, waiting for
-    # one or more clock cycles, and asserting the expected output values.
+
+@cocotb.test()
+async def test_pfd_ref_leads(dut):
+    """UP should pulse when clk_ref rises before clk_vco."""
+
+    dut._log.info("PFD test - clk_ref leads")
+    dut.rst_n.value  = 0
+    dut.ena.value    = 1
+    dut.uio_in.value = 0
+    dut.ui_in.value  = 0
+    await Timer(20, units='ns')
+    dut.rst_n.value = 1
+    await Timer(5, units='ns')
+
+    # Apply rising edge on clk_ref only (ui_in[0]=1, ui_in[1]=0)
+    set_inputs(dut, clk_ref=1, clk_vco=0)
+    await Timer(5, units='ns')
+
+    uio = int(dut.uio_out.value)
+    assert (uio & 0x1) == 1, "UP (uio_out[0]) should be 1, got %d" % (uio & 0x1)
+    assert (uio & 0x2) == 0, "DOWN (uio_out[1]) should be 0, got %d" % ((uio >> 1) & 0x1)
+
+    dut._log.info("PFD ref-leads test - PASSED")
+
+
+@cocotb.test()
+async def test_pfd_vco_leads(dut):
+    """DOWN should pulse when clk_vco rises before clk_ref."""
+
+    dut._log.info("PFD test - clk_vco leads")
+    dut.rst_n.value  = 0
+    dut.ena.value    = 1
+    dut.uio_in.value = 0
+    dut.ui_in.value  = 0
+    await Timer(20, units='ns')
+    dut.rst_n.value = 1
+    await Timer(5, units='ns')
+
+    # Apply rising edge on clk_vco only (ui_in[0]=0, ui_in[1]=1)
+    set_inputs(dut, clk_ref=0, clk_vco=1)
+    await Timer(5, units='ns')
+
+    uio = int(dut.uio_out.value)
+    assert (uio & 0x2) == 2, "DOWN (uio_out[1]) should be 1, got %d" % ((uio >> 1) & 0x1)
+    assert (uio & 0x1) == 0, "UP (uio_out[0]) should be 0, got %d" % (uio & 0x1)
+
+    dut._log.info("PFD VCO-leads test - PASSED")

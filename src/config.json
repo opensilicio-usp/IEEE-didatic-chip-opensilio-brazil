@@ -33,6 +33,10 @@
 
   "//": "Configuration docs: https://librelane.readthedocs.io/en/latest/reference/configuration.html",
 
+  "//": "Enable analog GPIO so ua[0] is treated as an analog pad (no digital ESD buffer).",
+  "USE_GPIO_ANALOG": 1,
+  "ANALOG_PINS": "ua[0]",
+
   "//": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
   "//": "!!! DO NOT CHANGE ANYTHING BELOW THIS POINT !!!",
   "//": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
