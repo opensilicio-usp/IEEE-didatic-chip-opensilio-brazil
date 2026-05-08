@@ -131,34 +131,40 @@ module tt_um_usp_didactic (
     // ==========================================================
     // MODULE 2 (main_sel=010) -- Phase-Frequency Detector (PFD)
     //
-    // Classic dual-FF topology with AND-based async reset.
+    // Classic dual-FF topology with reset when both set.
     // sub_in[0] = clk_ref
     // sub_in[1] = clk_vco
     //
     // UP   pulses when clk_ref leads clk_vco -> uo_out[0]
     // DOWN pulses when clk_vco leads clk_ref -> uo_out[1]
     //
-    // SYNTHESIS NOTE: Each FF uses exactly 2 edge-sensitive events
-    // (clock + pfd_reset). rst_n intentionally omitted from PFD
-    // FFs -- pfd_reset self-clears them; initial value 0 covers
-    // simulation.
+    // SYNTHESIS NOTE:
+    // The "textbook" async-reset PFD (pfd_reset fed back into the FF
+    // async resets) is flagged by Yosys "check" as a logic loop (ARST->Q),
+    // which fails LibreLane's Checker.YosysSynthChecks. We therefore clear
+    // the FFs synchronously (sample pfd_reset on clock edges) and include
+    // rst_n for deterministic init.
     // ==========================================================
     wire clk_ref = sub_in[0];
     wire clk_vco = sub_in[1];
 
     wire pfd_reset;
-    reg  up_ff   = 1'b0;
-    reg  down_ff = 1'b0;
+    reg  up_ff;
+    reg  down_ff;
 
     assign pfd_reset = up_ff & down_ff;
 
-    always @(posedge clk_ref or posedge pfd_reset)
-        if (pfd_reset) up_ff   <= 1'b0;
-        else           up_ff   <= 1'b1;
+    always @(posedge clk_ref or negedge rst_n) begin
+        if (!rst_n)        up_ff <= 1'b0;
+        else if (pfd_reset) up_ff <= 1'b0;
+        else               up_ff <= 1'b1;
+    end
 
-    always @(posedge clk_vco or posedge pfd_reset)
-        if (pfd_reset) down_ff <= 1'b0;
-        else           down_ff <= 1'b1;
+    always @(posedge clk_vco or negedge rst_n) begin
+        if (!rst_n)         down_ff <= 1'b0;
+        else if (pfd_reset) down_ff <= 1'b0;
+        else                down_ff <= 1'b1;
+    end
 
     wire [7:0] pfd_out = {6'b0, down_ff, up_ff};
 

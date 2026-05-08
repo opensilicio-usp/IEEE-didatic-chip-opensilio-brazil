@@ -106,13 +106,6 @@ async def test_pfd_ref_leads(dut):
     dut.rst_n.value = 1
     await Timer(5, units='ns')
 
-    # Force PFD self-reset: pulse both clocks simultaneously so pfd_reset fires.
-    # PFD FFs have no rst_n path; the AND (pfd_reset) is the only clear mechanism.
-    set_pfd(dut, clk_ref=1, clk_vco=1)
-    await Timer(4, units='ns')
-    set_pfd(dut, clk_ref=0, clk_vco=0)
-    await Timer(4, units='ns')
-
     # Apply rising edge on clk_ref only
     set_pfd(dut, clk_ref=1, clk_vco=0)
     await Timer(5, units='ns')
@@ -136,12 +129,6 @@ async def test_pfd_vco_leads(dut):
     await Timer(20, units='ns')
     dut.rst_n.value = 1
     await Timer(5, units='ns')
-
-    # Force PFD self-reset: up_ff may still be high from the previous test.
-    set_pfd(dut, clk_ref=1, clk_vco=1)
-    await Timer(4, units='ns')
-    set_pfd(dut, clk_ref=0, clk_vco=0)
-    await Timer(4, units='ns')
 
     # Apply rising edge on clk_vco only
     set_pfd(dut, clk_ref=0, clk_vco=1)
