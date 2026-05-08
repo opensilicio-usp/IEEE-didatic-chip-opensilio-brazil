@@ -74,15 +74,6 @@ async def test_pfd_ref_leads(dut):
     dut.rst_n.value = 1
     await Timer(5, units='ns')
 
-    # Force PFD self-reset: raise both clocks simultaneously so pfd_reset fires.
-    # PFD FFs do not respond to rst_n; the only way to clear them is via pfd_reset
-    # (the AND of up_ff and down_ff).  Pulsing both clocks sets both FFs to 1,
-    # pfd_reset fires asynchronously, and both FFs clear back to 0.
-    set_inputs(dut, clk_ref=1, clk_vco=1)
-    await Timer(4, units='ns')
-    set_inputs(dut, clk_ref=0, clk_vco=0)
-    await Timer(4, units='ns')
-
     # Apply rising edge on clk_ref only (ui_in[0]=1, ui_in[1]=0)
     set_inputs(dut, clk_ref=1, clk_vco=0)
     await Timer(5, units='ns')
@@ -106,14 +97,6 @@ async def test_pfd_vco_leads(dut):
     await Timer(20, units='ns')
     dut.rst_n.value = 1
     await Timer(5, units='ns')
-
-    # Force PFD self-reset: same rationale as test_pfd_ref_leads.
-    # up_ff may still be high from the previous test; pulse both clocks
-    # to trigger pfd_reset and clear both FFs before the actual stimulus.
-    set_inputs(dut, clk_ref=1, clk_vco=1)
-    await Timer(4, units='ns')
-    set_inputs(dut, clk_ref=0, clk_vco=0)
-    await Timer(4, units='ns')
 
     # Apply rising edge on clk_vco only (ui_in[0]=0, ui_in[1]=1)
     set_inputs(dut, clk_ref=0, clk_vco=1)

@@ -55,10 +55,6 @@
 
   "GRT_ALLOW_CONGESTION": 1,
 
-  "//": "Ring oscillator creates an intentional combinatorial feedback loop.",
-  "//": "Allow it through Yosys synthesis checks (Checker.YosysSynthChecks).",
-  "SYNTH_CHECKS_ALLOW_COMBO_LOOP": 1,
-
   "FP_IO_HLENGTH": 2,
   "FP_IO_VLENGTH": 2,
 

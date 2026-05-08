@@ -93,29 +93,33 @@ module tt_um_usp_didactic (
     // ==========================================================
     // MODULE 3 -- Phase-Frequency Detector (PFD)
     //
-    // Classic dual-FF topology with AND-based async reset.
+    // Classic dual-FF topology with reset when both set.
     // UP   pulses when clk_ref leads clk_vco.
     // DOWN pulses when clk_vco leads clk_ref.
     //
-    // SYNTHESIS NOTE: Each FF uses exactly 2 edge-sensitive events
-    // (clock + pfd_reset) which is the max Yosys supports.
-    // rst_n is intentionally omitted from PFD FFs -- the pfd_reset
-    // mechanism self-clears them; initial value 0 covers simulation.
+    // SYNTHESIS NOTE:
+    // The "textbook" async-reset PFD (reset generated from UP&DOWN fed
+    // back into the FF async resets) is flagged by Yosys "check" as a
+    // logic loop (ARST -> Q). To keep hardening flows happy, we do the
+    // reset synchronously: pfd_reset is sampled on each clock edge.
     // ==========================================================
     wire pfd_reset;
-    reg  up_ff   = 1'b0;   // initial value for RTL simulation
-    reg  down_ff = 1'b0;   // initial value for RTL simulation
+    reg  up_ff;
+    reg  down_ff;
 
     assign pfd_reset = up_ff & down_ff;
 
-    // Two edge-sensitive events only: posedge clock + posedge async reset
-    always @(posedge clk_ref or posedge pfd_reset)
-        if (pfd_reset) up_ff   <= 1'b0;
-        else           up_ff   <= 1'b1;
+    always @(posedge clk_ref or negedge rst_n) begin
+        if (!rst_n)       up_ff <= 1'b0;
+        else if (pfd_reset) up_ff <= 1'b0;
+        else              up_ff <= 1'b1;
+    end
 
-    always @(posedge clk_vco or posedge pfd_reset)
-        if (pfd_reset) down_ff <= 1'b0;
-        else           down_ff <= 1'b1;
+    always @(posedge clk_vco or negedge rst_n) begin
+        if (!rst_n)        down_ff <= 1'b0;
+        else if (pfd_reset) down_ff <= 1'b0;
+        else               down_ff <= 1'b1;
+    end
 
     // -- Output assignments -------------------------------------
     // uio[0]=UP, uio[1]=DOWN, uio[2]=ring/1024, uio[3]=ring raw
