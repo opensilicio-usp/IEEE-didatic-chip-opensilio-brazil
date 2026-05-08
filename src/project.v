@@ -17,9 +17,6 @@ module tt_um_usp_didactic (
     input  wire       ena,      // always 1 when the design is powered
     input  wire       clk,      // clock (unused -- design is fully async)
     input  wire       rst_n     // active-low reset
-    // Note: ua[5:0] analog pads are documented in info.yaml but are NOT
-    // part of the user module interface in the TT digital tile framework.
-    // The ring oscillator divided output is available on uio_out[2].
 );
 
     // -- Input aliases ------------------------------------------
@@ -70,8 +67,8 @@ module tt_um_usp_didactic (
     // Behavioral inverters ARE synthesized away by Yosys.
     // (* keep = "true" *) on every instance prevents removal.
     //
-    // uio_out[2] -> divided /1024 for frequency measurement
-    // uio_out[3] -> raw ring output (digital buffer, ~GHz on silicon)
+    // uio_out[2] -> ring /1024 (reliable measurement path)
+    // uio_out[3] -> ring raw (digital pad, degrades above ~400 MHz)
     // ==========================================================
     wire [10:0] ring;
 
@@ -99,23 +96,29 @@ module tt_um_usp_didactic (
     // Classic dual-FF topology with AND-based async reset.
     // UP   pulses when clk_ref leads clk_vco.
     // DOWN pulses when clk_vco leads clk_ref.
-    // AND gate resets both FFs when both are high (dead zone).
+    //
+    // SYNTHESIS NOTE: Each FF uses exactly 2 edge-sensitive events
+    // (clock + pfd_reset) which is the max Yosys supports.
+    // rst_n is intentionally omitted from PFD FFs -- the pfd_reset
+    // mechanism self-clears them; initial value 0 covers simulation.
     // ==========================================================
     wire pfd_reset;
-    reg  up_ff, down_ff;
+    reg  up_ff   = 1'b0;   // initial value for RTL simulation
+    reg  down_ff = 1'b0;   // initial value for RTL simulation
 
     assign pfd_reset = up_ff & down_ff;
 
-    always @(posedge clk_ref or posedge pfd_reset or negedge rst_n)
-        if      (!rst_n || pfd_reset) up_ff   <= 1'b0;
-        else                          up_ff   <= 1'b1;
+    // Two edge-sensitive events only: posedge clock + posedge async reset
+    always @(posedge clk_ref or posedge pfd_reset)
+        if (pfd_reset) up_ff   <= 1'b0;
+        else           up_ff   <= 1'b1;
 
-    always @(posedge clk_vco or posedge pfd_reset or negedge rst_n)
-        if      (!rst_n || pfd_reset) down_ff <= 1'b0;
-        else                          down_ff <= 1'b1;
+    always @(posedge clk_vco or posedge pfd_reset)
+        if (pfd_reset) down_ff <= 1'b0;
+        else           down_ff <= 1'b1;
 
     // -- Output assignments -------------------------------------
-    // uio_out[0]=UP, uio_out[1]=DOWN, uio_out[2]=ring /1024, uio_out[3]=ring raw
+    // uio[0]=UP, uio[1]=DOWN, uio[2]=ring/1024, uio[3]=ring raw
     assign uio_out = {4'b0000, ring[10], ring_div[9], down_ff, up_ff};
     assign uio_oe  = 8'b00001111;  // bits [3:0] are outputs
 
@@ -123,15 +126,19 @@ endmodule
 
 
 // =============================================================
-// Behavioral stub for RTL (pre-layout) simulation only.
-// OpenLane uses the real PDK cell during synthesis.
-// Excluded by GL_TEST define in gate-level simulation.
+// Behavioral stub for RTL simulation only.
+// - Excluded during synthesis by SYNTHESIS define (Yosys -D SYNTHESIS)
+// - Excluded during gate-level sim by GL_TEST define
+// Without the guard, the stub would conflict with the PDK Verilog
+// models loaded by the linter (MODDUP warning).
 // =============================================================
 `ifndef GL_TEST
+`ifndef SYNTHESIS
 module sky130_fd_sc_hd__inv_1 (
     input  wire A,
     output wire Y
 );
     assign Y = ~A;
 endmodule
+`endif
 `endif
