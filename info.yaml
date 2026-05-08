@@ -5,7 +5,7 @@ project:
   discord:     ""
   description: "Didactic chip for teaching CMOS design at USP. Three modules: a 7-gate logic library, an 11-stage SKY130 ring oscillator with analog output, and a phase-frequency detector (PFD)."
   language:    "Verilog"
-  clock_hz:    0       # Design is fully asynchronous (no board clock used)
+  clock_hz:    0
 
   # A single tile is about 167x108 uM.
   tiles: "1x1"
@@ -19,14 +19,14 @@ project:
 # This section is for the datasheet/website.
 pinout:
   # Inputs
-  ui[0]: "clk_ref — PFD reference clock input"
-  ui[1]: "clk_vco — PFD VCO clock input"
-  ui[2]: "gate_sel[0] — logic gate selector bit 0"
-  ui[3]: "gate_sel[1] — logic gate selector bit 1"
-  ui[4]: "gate_sel[2] — logic gate selector bit 2"
-  ui[5]: "A — logic gate input A"
-  ui[6]: "B — logic gate input B"
-  ui[7]: "ring_osc_enable — enable ring oscillator (active high)"
+  ui[0]: "clk_ref (PFD reference clock input)"
+  ui[1]: "clk_vco (PFD VCO clock input)"
+  ui[2]: "gate_sel[0] (logic gate selector bit 0)"
+  ui[3]: "gate_sel[1] (logic gate selector bit 1)"
+  ui[4]: "gate_sel[2] (logic gate selector bit 2)"
+  ui[5]: "A (logic gate input A)"
+  ui[6]: "B (logic gate input B)"
+  ui[7]: "ring_osc_enable (enable ring oscillator, active high)"
 
   # Outputs
   uo[0]: "selected gate output (mux of 7 gates via gate_sel)"
@@ -39,14 +39,18 @@ pinout:
   uo[7]: "XNOR(A,B)"
 
   # Bidirectional pins
-  uio[0]: "UP — PFD up signal (output)"
-  uio[1]: "DOWN — PFD down signal (output)"
-  uio[2]: "ring_osc /1024 — divided ring oscillator output (output)"
+  uio[0]: "UP (PFD up signal, output)"
+  uio[1]: "DOWN (PFD down signal, output)"
+  uio[2]: "ring_osc /1024 (divided ring oscillator output)"
   uio[3]: ""
   uio[4]: ""
   uio[5]: ""
   uio[6]: ""
   uio[7]: ""
+
+  # Analog pins
+  ua[0]: "ring oscillator raw output (~1 GHz, analog pad)"
+  ua[1]: "unused (floating)"
 
 # Do not change!
 yaml_version: 6
