@@ -48,9 +48,13 @@ pinout:
   uio[6]: ""
   uio[7]: ""
 
-  # Analog pins
+  # Analog pins (ua[0..5] are required by TTSKY26B; ua[1..5] unused)
   ua[0]: "ring oscillator raw output (~1 GHz, analog pad)"
   ua[1]: "unused (floating)"
+  ua[2]: ""
+  ua[3]: ""
+  ua[4]: ""
+  ua[5]: ""
 
 # Do not change!
 yaml_version: 6
