@@ -16,8 +16,10 @@ module tt_um_usp_didactic (
     output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
     input  wire       ena,      // always 1 when the design is powered
     input  wire       clk,      // clock (unused -- design is fully async)
-    input  wire       rst_n,    // active-low reset
-    inout  wire [1:0] ua        // Analog pads -- direct connection, no ESD buffer
+    input  wire       rst_n     // active-low reset
+    // Note: ua[5:0] analog pads are documented in info.yaml but are NOT
+    // part of the user module interface in the TT digital tile framework.
+    // The ring oscillator divided output is available on uio_out[2].
 );
 
     // -- Input aliases ------------------------------------------
@@ -68,8 +70,8 @@ module tt_um_usp_didactic (
     // Behavioral inverters ARE synthesized away by Yosys.
     // (* keep = "true" *) on every instance prevents removal.
     //
-    // ua[0]      -> raw ring output (~200 MHz-1.5 GHz on silicon)
-    // uio_out[2] -> divided /1024 for basic equipment
+    // uio_out[2] -> divided /1024 for frequency measurement
+    // uio_out[3] -> raw ring output (digital buffer, ~GHz on silicon)
     // ==========================================================
     wire [10:0] ring;
 
@@ -84,9 +86,6 @@ module tt_um_usp_didactic (
     (* keep = "true" *) sky130_fd_sc_hd__inv_1 inv8  (.A(ring[7]),  .Y(ring[8]));
     (* keep = "true" *) sky130_fd_sc_hd__inv_1 inv9  (.A(ring[8]),  .Y(ring[9]));
     (* keep = "true" *) sky130_fd_sc_hd__inv_1 inv10 (.A(ring[9]),  .Y(ring[10]));
-
-    assign ua[0] = ring[10];  // analog pad: direct oscilloscope probe point
-    assign ua[1] = 1'bz;      // unused analog pad -- leave floating
 
     // Divide-by-1024 counter (10-bit, MSB -> uio_out[2])
     reg [9:0] ring_div;
@@ -116,9 +115,9 @@ module tt_um_usp_didactic (
         else                          down_ff <= 1'b1;
 
     // -- Output assignments -------------------------------------
-    // uio_out[0]=UP, uio_out[1]=DOWN, uio_out[2]=ring /1024
-    assign uio_out = {5'b00000, ring_div[9], down_ff, up_ff};
-    assign uio_oe  = 8'b00000111;  // bits [2:0] are outputs
+    // uio_out[0]=UP, uio_out[1]=DOWN, uio_out[2]=ring /1024, uio_out[3]=ring raw
+    assign uio_out = {4'b0000, ring[10], ring_div[9], down_ff, up_ff};
+    assign uio_oe  = 8'b00001111;  // bits [3:0] are outputs
 
 endmodule
 

@@ -23,9 +23,6 @@ module tb ();
   wire [7:0] uio_out;
   wire [7:0] uio_oe;
 
-  // Analog ports — declared as wire; driven by the DUT (ring[10] / 1'bz)
-  wire [1:0] ua;
-
 `ifdef GL_TEST
   wire VPWR = 1'b1;
   wire VGND = 1'b0;
@@ -45,8 +42,7 @@ module tb ();
       .uio_oe (uio_oe),
       .ena    (ena),
       .clk    (clk),
-      .rst_n  (rst_n),
-      .ua     (ua)
+      .rst_n  (rst_n)
   );
 
 endmodule
