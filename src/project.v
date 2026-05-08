@@ -5,7 +5,18 @@
 
 // =============================================================
 // (IEEE) USP OpenSilicio Didactic Testchip -- TTSKY26B
-// Three modules: Logic Gates | Ring Oscillator | PFD
+//
+// Five educational modules routed by a 3-bit main MUX:
+//   ui_in[7:5] = main_sel
+//   000 -- Logic Gate Library
+//   001 -- Ring Oscillator + 24-bit Configurable Divider
+//   010 -- Phase-Frequency Detector (PFD)
+//   011 -- Flip-Flop Study (D-FF and T-FF)
+//   100 -- 4-Bit Binary Counter
+//   101-111 -- outputs grounded (reserved)
+//
+//   ui_in[4:0] = sub_in (shared; meaning varies by module)
+//   uio_out[3:0] = always-live monitoring regardless of main_sel
 // =============================================================
 
 module tt_um_usp_didactic (
@@ -19,22 +30,27 @@ module tt_um_usp_didactic (
     input  wire       rst_n     // active-low reset
 );
 
-    // -- Input aliases ------------------------------------------
-    wire        A       = ui_in[5];
-    wire        B       = ui_in[6];
-    wire [2:0]  sel     = ui_in[4:2];
-    wire        clk_ref = ui_in[0];
-    wire        clk_vco = ui_in[1];
-    wire        ring_en = ui_in[7];
+    // -- Global selectors --------------------------------------
+    wire [2:0] main_sel = ui_in[7:5];
+    wire [4:0] sub_in   = ui_in[4:0];
 
     // Silence unused-input warning
     wire _unused = &{ena, clk, uio_in, 1'b0};
 
     // ==========================================================
-    // MODULE 1 -- Logic Gate Library
-    // All 7 gate results are always live on uo_out[7:1].
-    // uo_out[0] mirrors the gate selected by sel (ui_in[4:2]).
+    // MODULE 0 (main_sel=000) -- Logic Gate Library
+    //
+    // sub_in[0] = A
+    // sub_in[1] = B
+    // sub_in[4:2] = gate_sel (selects which gate drives uo_out[0])
+    //
+    // uo_out[7:1] -- all 7 gates live simultaneously
+    // uo_out[0]   -- gate selected by gate_sel
     // ==========================================================
+    wire        A        = sub_in[0];
+    wire        B        = sub_in[1];
+    wire [2:0]  gate_sel = sub_in[4:2];
+
     wire not_a   = ~A;
     wire and_ab  = A & B;
     wire or_ab   = A | B;
@@ -45,7 +61,7 @@ module tt_um_usp_didactic (
 
     reg selected_gate;
     always @(*) begin
-        case (sel)
+        case (gate_sel)
             3'd0: selected_gate = not_a;
             3'd1: selected_gate = and_ab;
             3'd2: selected_gate = or_ab;
@@ -57,19 +73,30 @@ module tt_um_usp_didactic (
         endcase
     end
 
-    // uo_out[7:1] = all gates; uo_out[0] = selected gate
-    assign uo_out = {xnor_ab, nor_ab, nand_ab, xor_ab,
-                     or_ab, and_ab, not_a, selected_gate};
+    wire [7:0] gates_out = {xnor_ab, nor_ab, nand_ab, xor_ab,
+                             or_ab, and_ab, not_a, selected_gate};
 
     // ==========================================================
-    // MODULE 2 -- 11-Stage Ring Oscillator (explicit SKY130 cells)
+    // MODULE 1 (main_sel=001) -- 11-Stage Ring Oscillator
+    //                            + 24-bit Configurable Divider
     //
-    // Behavioral inverters ARE synthesized away by Yosys.
-    // (* keep = "true" *) on every instance prevents removal.
+    // sub_in[2]   = ring_en  (active high: enables oscillation)
+    // sub_in[1:0] = div_sel  (selects frequency tap)
+    //   00 -> ring_div[6]  ~ 13.6 MHz  (scope measurement)
+    //   01 -> ring_div[12] ~  424 kHz  (USB logic analyzer)
+    //   10 -> ring_div[20] ~  830 Hz   (audio / buzzer)
+    //   11 -> ring_div[23] ~  104 Hz   (LED-visible blink)
     //
-    // uio_out[2] -> ring /1024 (reliable measurement path)
-    // uio_out[3] -> ring raw (digital pad, degrades above ~400 MHz)
+    // uo_out[0] -- selected divider tap
+    //
+    // Explicit sky130_fd_sc_hd__inv_1 instantiations with
+    // (* keep = "true" *) prevent Yosys from optimising away
+    // the chain. The intentional combinatorial loop is expected;
+    // config.json sets SYNTH_CHECKS_ALLOW_COMBO_LOOP=1.
     // ==========================================================
+    wire        ring_en  = sub_in[2];
+    wire [1:0]  div_sel  = sub_in[1:0];
+
     wire [10:0] ring;
 
     (* keep = "true" *) sky130_fd_sc_hd__inv_1 inv0  (.A(ring[10] & ring_en), .Y(ring[0]));
@@ -84,57 +111,135 @@ module tt_um_usp_didactic (
     (* keep = "true" *) sky130_fd_sc_hd__inv_1 inv9  (.A(ring[8]),  .Y(ring[9]));
     (* keep = "true" *) sky130_fd_sc_hd__inv_1 inv10 (.A(ring[9]),  .Y(ring[10]));
 
-    // Divide-by-1024 counter (10-bit, MSB -> uio_out[2])
-    reg [9:0] ring_div;
+    reg [23:0] ring_div;
     always @(posedge ring[10] or negedge rst_n)
-        if (!rst_n) ring_div <= 10'd0;
-        else        ring_div <= ring_div + 10'd1;
+        if (!rst_n) ring_div <= 24'd0;
+        else        ring_div <= ring_div + 24'd1;
+
+    reg ring_div_out;
+    always @(*) begin
+        case (div_sel)
+            2'd0: ring_div_out = ring_div[6];
+            2'd1: ring_div_out = ring_div[12];
+            2'd2: ring_div_out = ring_div[20];
+            default: ring_div_out = ring_div[23];
+        endcase
+    end
+
+    wire [7:0] ring_out = {7'b0, ring_div_out};
 
     // ==========================================================
-    // MODULE 3 -- Phase-Frequency Detector (PFD)
+    // MODULE 2 (main_sel=010) -- Phase-Frequency Detector (PFD)
     //
-    // Classic dual-FF topology with reset when both set.
-    // UP   pulses when clk_ref leads clk_vco.
-    // DOWN pulses when clk_vco leads clk_ref.
+    // Classic dual-FF topology with AND-based async reset.
+    // sub_in[0] = clk_ref
+    // sub_in[1] = clk_vco
     //
-    // SYNTHESIS NOTE:
-    // The "textbook" async-reset PFD (reset generated from UP&DOWN fed
-    // back into the FF async resets) is flagged by Yosys "check" as a
-    // logic loop (ARST -> Q). To keep hardening flows happy, we do the
-    // reset synchronously: pfd_reset is sampled on each clock edge.
+    // UP   pulses when clk_ref leads clk_vco -> uo_out[0]
+    // DOWN pulses when clk_vco leads clk_ref -> uo_out[1]
+    //
+    // SYNTHESIS NOTE: Each FF uses exactly 2 edge-sensitive events
+    // (clock + pfd_reset). rst_n intentionally omitted from PFD
+    // FFs -- pfd_reset self-clears them; initial value 0 covers
+    // simulation.
     // ==========================================================
+    wire clk_ref = sub_in[0];
+    wire clk_vco = sub_in[1];
+
     wire pfd_reset;
-    reg  up_ff;
-    reg  down_ff;
+    reg  up_ff   = 1'b0;
+    reg  down_ff = 1'b0;
 
     assign pfd_reset = up_ff & down_ff;
 
-    always @(posedge clk_ref or negedge rst_n) begin
-        if (!rst_n)       up_ff <= 1'b0;
-        else if (pfd_reset) up_ff <= 1'b0;
-        else              up_ff <= 1'b1;
+    always @(posedge clk_ref or posedge pfd_reset)
+        if (pfd_reset) up_ff   <= 1'b0;
+        else           up_ff   <= 1'b1;
+
+    always @(posedge clk_vco or posedge pfd_reset)
+        if (pfd_reset) down_ff <= 1'b0;
+        else           down_ff <= 1'b1;
+
+    wire [7:0] pfd_out = {6'b0, down_ff, up_ff};
+
+    // ==========================================================
+    // MODULE 3 (main_sel=011) -- Flip-Flop Study (D-FF + T-FF)
+    //
+    // sub_in[0] = ff_clk   (manual clock / button)
+    // sub_in[1] = ff_d     (D data input)
+    // sub_in[2] = ff_t_en  (T toggle enable)
+    // sub_in[3] = ff_rst   (async reset, active high)
+    //
+    // uo_out[0] = D-FF Q
+    // uo_out[1] = D-FF ~Q (complement output)
+    // uo_out[2] = T-FF Q
+    // ==========================================================
+    wire ff_clk  = sub_in[0];
+    wire ff_d    = sub_in[1];
+    wire ff_t_en = sub_in[2];
+    wire ff_rst  = sub_in[3];
+
+    reg dff_q;
+    always @(posedge ff_clk or posedge ff_rst)
+        if (ff_rst) dff_q <= 1'b0;
+        else        dff_q <= ff_d;
+
+    reg tff_q;
+    always @(posedge ff_clk or posedge ff_rst)
+        if (ff_rst) tff_q <= 1'b0;
+        else if (ff_t_en) tff_q <= ~tff_q;
+
+    wire [7:0] ff_out = {5'b0, tff_q, ~dff_q, dff_q};
+
+    // ==========================================================
+    // MODULE 4 (main_sel=100) -- 4-Bit Binary Counter
+    //
+    // sub_in[0] = cnt_clk  (manual clock / button)
+    // sub_in[1] = cnt_rst  (async reset, active high)
+    //
+    // uo_out[3:0] = counter value (connect directly to 4 LEDs)
+    // ==========================================================
+    wire cnt_clk = sub_in[0];
+    wire cnt_rst = sub_in[1];
+
+    reg [3:0] counter;
+    always @(posedge cnt_clk or posedge cnt_rst)
+        if (cnt_rst) counter <= 4'd0;
+        else         counter <= counter + 4'd1;
+
+    wire [7:0] cnt_out = {4'b0, counter};
+
+    // ==========================================================
+    // MAIN MUX -- route selected module to uo_out[7:0]
+    // ==========================================================
+    reg [7:0] uo_mux;
+    always @(*) begin
+        case (main_sel)
+            3'd0: uo_mux = gates_out;
+            3'd1: uo_mux = ring_out;
+            3'd2: uo_mux = pfd_out;
+            3'd3: uo_mux = ff_out;
+            3'd4: uo_mux = cnt_out;
+            default: uo_mux = 8'b0;
+        endcase
     end
 
-    always @(posedge clk_vco or negedge rst_n) begin
-        if (!rst_n)        down_ff <= 1'b0;
-        else if (pfd_reset) down_ff <= 1'b0;
-        else               down_ff <= 1'b1;
-    end
+    assign uo_out = uo_mux;
 
-    // -- Output assignments -------------------------------------
-    // uio[0]=UP, uio[1]=DOWN, uio[2]=ring/1024, uio[3]=ring raw
-    assign uio_out = {4'b0000, ring[10], ring_div[9], down_ff, up_ff};
-    assign uio_oe  = 8'b00001111;  // bits [3:0] are outputs
+    // -- Always-live monitoring on uio -------------------------
+    // uio[0] = UP (PFD)          always visible for scope probing
+    // uio[1] = DOWN (PFD)        always visible for scope probing
+    // uio[2] = ring/1024         reliable low-freq measurement tap
+    // uio[3] = ring raw          direct oscillator output
+    assign uio_out = {4'b0, ring[10], ring_div[9], down_ff, up_ff};
+    assign uio_oe  = 8'b00001111;   // bits [3:0] are outputs
 
 endmodule
 
 
 // =============================================================
 // Behavioral stub for RTL simulation only.
-// - Excluded during synthesis by SYNTHESIS define (Yosys -D SYNTHESIS)
-// - Excluded during gate-level sim by GL_TEST define
-// Without the guard, the stub would conflict with the PDK Verilog
-// models loaded by the linter (MODDUP warning).
+// Excluded during synthesis (SYNTHESIS) and gate-level sim (GL_TEST).
 // =============================================================
 `ifndef GL_TEST
 `ifndef SYNTHESIS

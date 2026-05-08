@@ -3,7 +3,7 @@ project:
   title:       "(IEEE) USP OpenSilicio Didactic Testchip"
   author:      "USP OpenSilicio Group (IEEE)"
   discord:     ""
-  description: "Didactic chip for teaching CMOS design at USP. Three modules: a 7-gate logic library, an 11-stage SKY130 ring oscillator, and a phase-frequency detector (PFD)."
+  description: "Didactic chip for teaching CMOS design at USP. Five modules selected by a 3-bit main MUX: logic gate library, ring oscillator with 24-bit configurable divider, phase-frequency detector (PFD), D/T flip-flop study, and 4-bit binary counter."
   language:    "Verilog"
   clock_hz:    0
 
@@ -19,30 +19,30 @@ project:
 # This section is for the datasheet/website.
 pinout:
   # Inputs
-  ui[0]: "clk_ref (PFD reference clock input)"
-  ui[1]: "clk_vco (PFD VCO clock input)"
-  ui[2]: "gate_sel[0] (logic gate selector bit 0)"
-  ui[3]: "gate_sel[1] (logic gate selector bit 1)"
-  ui[4]: "gate_sel[2] (logic gate selector bit 2)"
-  ui[5]: "A (logic gate input A)"
-  ui[6]: "B (logic gate input B)"
-  ui[7]: "ring_osc_enable (enable ring oscillator, active high)"
+  ui[0]: "sub_in[0]: A (gates) | clk_ref (PFD) | ff_clk (FF) | cnt_clk (counter)"
+  ui[1]: "sub_in[1]: B (gates) | clk_vco (PFD) | ff_d (FF) | cnt_rst (counter) | div_sel[0] (ring)"
+  ui[2]: "sub_in[2]: gate_sel[0] | ring_en (ring) | ff_t_en (FF)"
+  ui[3]: "sub_in[3]: gate_sel[1] | ff_rst (FF)"
+  ui[4]: "sub_in[4]: gate_sel[2]"
+  ui[5]: "main_sel[0] (module selector bit 0)"
+  ui[6]: "main_sel[1] (module selector bit 1)"
+  ui[7]: "main_sel[2] (module selector bit 2)"
 
-  # Outputs
-  uo[0]: "selected gate output (mux of 7 gates via gate_sel)"
-  uo[1]: "NOT(A)"
-  uo[2]: "AND(A,B)"
-  uo[3]: "OR(A,B)"
-  uo[4]: "XOR(A,B)"
-  uo[5]: "NAND(A,B)"
-  uo[6]: "NOR(A,B)"
-  uo[7]: "XNOR(A,B)"
+  # Outputs (routed through main MUX based on ui[7:5])
+  uo[0]: "MUX[000]=selected gate | MUX[001]=divider out | MUX[010]=UP | MUX[011]=D-FF Q | MUX[100]=cnt[0]"
+  uo[1]: "MUX[000]=NOT(A) | MUX[010]=DOWN | MUX[011]=D-FF ~Q | MUX[100]=cnt[1]"
+  uo[2]: "MUX[000]=AND(A,B) | MUX[011]=T-FF Q | MUX[100]=cnt[2]"
+  uo[3]: "MUX[000]=OR(A,B) | MUX[100]=cnt[3]"
+  uo[4]: "MUX[000]=XOR(A,B)"
+  uo[5]: "MUX[000]=NAND(A,B)"
+  uo[6]: "MUX[000]=NOR(A,B)"
+  uo[7]: "MUX[000]=XNOR(A,B)"
 
-  # Bidirectional pins
-  uio[0]: "UP (PFD up signal, output)"
-  uio[1]: "DOWN (PFD down signal, output)"
-  uio[2]: "ring_osc /1024 (divided ring oscillator output)"
-  uio[3]: "ring_osc raw (direct ring output via digital pad)"
+  # Bidirectional pins (always live, independent of main MUX)
+  uio[0]: "UP (PFD up signal, output, always live)"
+  uio[1]: "DOWN (PFD down signal, output, always live)"
+  uio[2]: "ring_osc /1024 (divided ring output, always live)"
+  uio[3]: "ring_osc raw (direct ring output via digital pad, always live)"
   uio[4]: ""
   uio[5]: ""
   uio[6]: ""
