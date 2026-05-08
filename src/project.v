@@ -89,12 +89,16 @@ module tt_um_usp_didactic (
     //
     // uo_out[0] -- selected divider tap
     //
-    // Explicit sky130_fd_sc_hd__inv_1 instantiations with
-    // (* keep = "true" *) prevent Yosys from optimising away
-    // the chain. The intentional combinatorial loop is expected;
-    // config.json sets SYNTH_CHECKS_ALLOW_COMBO_LOOP=1.
+    // Explicit sky130_fd_sc_hd__inv_1 instantiations with (* keep = "true" *)
+    // prevent Yosys from optimising away the chain.
+    //
+    // IMPORTANT:
+    // The ring oscillator is always instantiated, so we must ensure it does
+    // not oscillate while other experiments are selected (otherwise RTL sims
+    // become extremely slow due to constant toggling). We therefore gate the
+    // enable with main_sel==001.
     // ==========================================================
-    wire        ring_en  = sub_in[2];
+    wire        ring_en  = (main_sel == 3'd1) & sub_in[2];
     wire [1:0]  div_sel  = sub_in[1:0];
 
     wire [10:0] ring;
