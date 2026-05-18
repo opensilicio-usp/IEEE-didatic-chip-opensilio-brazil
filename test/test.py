@@ -270,23 +270,20 @@ class I2CBus:
 
     async def update(self):
         """Resolves the open-drain bus state and drives uio_in."""
-        # CORREÇÃO AQUI: Lê o barramento todo, depois extrai o bit 0 com '& 1'
         oe_val = self.dut.uio_oe.value
-        slave_pull = (oe_val.integer & 1) if oe_val.is_resolvable else 0
+        slave_pull = (oe_val.to_unsigned() & 1) if oe_val.is_resolvable else 0
         
-        # Wired-AND: Bus is 0 if either Master OR Slave pulls it low. Otherwise 1 (pull-up).
         bus_sda = 0 if (self.sda == 0 or slave_pull == 1) else 1
         bus_scl = self.scl
         
         in_val = self.dut.uio_in.value
-        val = in_val.integer if in_val.is_resolvable else 0
+        val = in_val.to_unsigned() if in_val.is_resolvable else 0
         
-        # Mask out bits 0 and 1, then set them to our new I2C bus state
         val = (val & ~0x3) | ((bus_scl & 1) << 1) | (bus_sda & 1)
         self.dut.uio_in.value = val
 
     async def wait(self):
-        await Timer(self.delay, unit='ns') # CORREÇÃO: units -> unit
+        await Timer(self.delay, unit='ns')
 
     async def start(self):
         self.sda = 1
@@ -304,12 +301,15 @@ class I2CBus:
         await self.wait()
 
     async def stop(self):
+        # Correção do STOP: Garantir setup time correto (SDA em 0, sobe SCL, depois sobe SDA)
         self.sda = 0
+        await self.update()
+        await self.wait()
+        
         self.scl = 1
         await self.update()
         await self.wait()
         
-        # STOP condition: SDA goes high while SCL is high
         self.sda = 1
         await self.update()
         await self.wait()
@@ -335,15 +335,14 @@ class I2CBus:
         self.scl = 1
         await self.update()
         
-        await Timer(100, unit='ns') # CORREÇÃO: units -> unit
+        await Timer(100, unit='ns')
         await self.update()
         
-        # CORREÇÃO AQUI: Lê o barramento todo, depois extrai o bit 0
         oe_val = self.dut.uio_oe.value
-        slave_pull = (oe_val.integer & 1) if oe_val.is_resolvable else 0
+        slave_pull = (oe_val.to_unsigned() & 1) if oe_val.is_resolvable else 0
         bit_val = 0 if slave_pull == 1 else 1
         
-        await Timer(self.delay - 100, unit='ns') # CORREÇÃO: units -> unit
+        await Timer(self.delay - 100, unit='ns')
         
         self.scl = 0
         await self.update()

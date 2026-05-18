@@ -156,8 +156,9 @@ module i2c_expander_core #(
                     STATE_TX_DATA: begin
                         // drive_sda pushes shift_reg[7] combinationally
                         if (scl_fall) begin
-                            if (bit_cnt == 4'd8) begin
-                                state <= STATE_RX_ACK; // Sent 8 bits, wait for master to ACK
+                            // CORREÇÃO AQUI: Altere de 4'd8 para 4'd7
+                            if (bit_cnt == 4'd7) begin
+                                state <= STATE_RX_ACK; // Já enviou o bit 0, vá esperar o ACK
                             end else begin
                                 shift_reg <= {shift_reg[6:0], 1'b1}; // Shift left
                                 bit_cnt   <= bit_cnt + 1'b1;
