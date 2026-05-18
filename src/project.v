@@ -35,7 +35,7 @@ module tt_um_usp_didactic (
     wire [4:0] sub_in   = ui_in[4:0];
 
     // Silence unused-input warning
-    wire _unused = &{ena, clk, uio_in, 1'b0};
+    wire _unused = &{ena, uio_in[5:0], 1'b0};
 
     // ==========================================================
     // MODULE 0 (main_sel=000) -- Logic Gate Library
@@ -241,8 +241,49 @@ module tt_um_usp_didactic (
     // uio[1] = DOWN (PFD)        always visible for scope probing
     // uio[2] = ring/1024         reliable low-freq measurement tap
     // uio[3] = ring raw          direct oscillator output
-    assign uio_out = {4'b0, ring[10], ring_div[9], down_ff, up_ff};
-    assign uio_oe  = 8'b00001111;   // bits [3:0] are outputs
+    assign uio_out[5:0] = {2'b0, ring[10], ring_div[9], down_ff, up_ff};
+    assign uio_oe[5:0]  = 6'b001111;   // bits [3:0] are outputs
+
+
+
+
+
+
+
+
+
+    // ==========================================
+    // Sinais internos
+    // ==========================================
+    wire scl;
+    wire sda;
+    wire sda_drive;
+
+    // ==========================================
+    // Configuração dos Pinos I2C (uio[1:0])
+    // ==========================================
+
+    // PIN IO 7: SCL (Apenas Entrada)
+    assign scl        = uio_in[7];  // Lê o clock externo
+    assign uio_oe[7]  = 1'b0;       // Força como entrada 
+    assign uio_out[7] = 1'b0;       // Não utilizado
+
+    // PIN IO 6: SDA (Bidirecional / Dreno Aberto)
+    assign sda        = uio_in[6];  // Lê os dados do barramento
+    assign uio_oe[6]  = sda_drive;  // 1 = Habilita saída (puxa pra baixo), 0 = Alta impedância (lê)
+    assign uio_out[6] = 1'b0;       // Quando habilitado, SEMPRE escreve 0 (GND)
+
+    // ==========================================
+    // Instanciação do Bloco Encapsulado
+    // ==========================================
+    
+    module_i2c module_i2c_inst (
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .scl       (scl),
+        .sda       (sda),
+        .sda_drive (sda_drive)
+    );
 
 endmodule
 

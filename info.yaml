@@ -5,7 +5,7 @@ project:
   discord:     ""
   description: "Didactic chip for teaching CMOS design at USP. Five modules selected by a 3-bit main MUX: logic gate library, ring oscillator with 24-bit configurable divider, phase-frequency detector (PFD), D/T flip-flop study, and 4-bit binary counter."
   language:    "Verilog"
-  clock_hz:    0
+  clock_hz:    50000000  # 50 MHz
 
   # A single tile is about 167x108 uM.
   tiles: "1x1"
@@ -14,6 +14,9 @@ project:
 
   source_files:
     - "project.v"
+    - "i2c_modules/i2c_expander_core.v"
+    - "i2c_modules/module_i2c.v"
+    - "i2c_modules/reg_8bit.v"
 
 # The pinout of your project. Leave unused pins blank.
 # This section is for the datasheet/website.
@@ -45,8 +48,8 @@ pinout:
   uio[3]: "ring_osc raw (direct ring output via digital pad, always live)"
   uio[4]: ""
   uio[5]: ""
-  uio[6]: ""
-  uio[7]: ""
+  uio[6]: "SDA - module_i2c_expander"
+  uio[7]: "SCL - module_i2c_expander"
 
   # Analog pins (required by TTSKY26B schema; not driven by user module)
   ua[0]: ""

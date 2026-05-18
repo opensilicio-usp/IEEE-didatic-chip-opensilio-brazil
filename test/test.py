@@ -11,6 +11,8 @@
 import cocotb
 from cocotb.triggers import Timer
 
+from cocotb.clock import Clock 
+
 
 # ---------------------------------------------------------------------------
 # Input helpers
@@ -242,3 +244,191 @@ async def test_counter(dut):
     assert (uo & 0xF) == 0, "Counter should be 0 after mid-count reset, got %d" % (uo & 0xF)
 
     dut._log.info("Counter test - PASSED")
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# Helper Class for I2C Master Emulation
+# ---------------------------------------------------------------------------
+class I2CBus:
+    """Emulates an I2C Master with open-drain SDA handling via uio_oe."""
+    def __init__(self, dut, scl_half_period_ns=500):
+        self.dut = dut
+        self.sda = 1
+        self.scl = 1
+        self.delay = scl_half_period_ns # 500ns half-period = 1us full period = 1MHz I2C clock
+
+    async def update(self):
+        """Resolves the open-drain bus state and drives uio_in."""
+        # Check if the slave (DUT) is pulling SDA low (uio_oe[0] == 1 means driving 0)
+        slave_pull = self.dut.uio_oe[0].value.integer if self.dut.uio_oe[0].value.is_resolvable else 0
+        
+        # Wired-AND: Bus is 0 if either Master OR Slave pulls it low. Otherwise 1 (pull-up).
+        bus_sda = 0 if (self.sda == 0 or slave_pull == 1) else 1
+        bus_scl = self.scl # We assume the slave doesn't stretch the SCL clock
+        
+        # Read current uio_in to avoid overwriting other bits
+        val = self.dut.uio_in.value.integer if self.dut.uio_in.value.is_resolvable else 0
+        
+        # Mask out bits 0 and 1, then set them to our new I2C bus state
+        val = (val & ~0x3) | ((bus_scl & 1) << 1) | (bus_sda & 1)
+        self.dut.uio_in.value = val
+
+    async def wait(self):
+        await Timer(self.delay, units='ns')
+
+    async def start(self):
+        self.sda = 1
+        self.scl = 1
+        await self.update()
+        await self.wait()
+        
+        # START condition: SDA goes low while SCL is high
+        self.sda = 0
+        await self.update()
+        await self.wait()
+        
+        self.scl = 0
+        await self.update()
+        await self.wait()
+
+    async def stop(self):
+        self.sda = 0
+        self.scl = 1
+        await self.update()
+        await self.wait()
+        
+        # STOP condition: SDA goes high while SCL is high
+        self.sda = 1
+        await self.update()
+        await self.wait()
+
+    async def write_bit(self, bit):
+        self.sda = bit
+        await self.update()
+        await self.wait()
+        
+        self.scl = 1
+        await self.update()
+        await self.wait()
+        
+        self.scl = 0
+        await self.update()
+        await self.wait()
+
+    async def read_bit(self):
+        self.sda = 1 # Master releases the SDA line
+        await self.update()
+        await self.wait()
+        
+        self.scl = 1
+        await self.update()
+        
+        # Wait a tiny bit for the slave to react and drive the line, then sample it
+        await Timer(100, units='ns')
+        await self.update()
+        
+        slave_pull = self.dut.uio_oe[0].value.integer if self.dut.uio_oe[0].value.is_resolvable else 0
+        bit_val = 0 if slave_pull == 1 else 1
+        
+        # Finish the half-clock period
+        await Timer(self.delay - 100, units='ns')
+        
+        self.scl = 0
+        await self.update()
+        await self.wait()
+        return bit_val
+
+    async def write_byte(self, byte_val):
+        for i in range(7, -1, -1):
+            await self.write_bit((byte_val >> i) & 1)
+        return await self.read_bit() # Return the ACK bit (0 = ACK, 1 = NACK)
+
+    async def read_byte(self, ack=True):
+        byte_val = 0
+        for i in range(8):
+            byte_val = (byte_val << 1) | await self.read_bit()
+        
+        # Master sends ACK (0) to continue, or NACK (1) to stop
+        await self.write_bit(0 if ack else 1)
+        return byte_val
+
+
+# ---------------------------------------------------------------------------
+# I2C Expander Loopback Test
+# ---------------------------------------------------------------------------
+@cocotb.test()
+async def test_i2c_expander_loopback(dut):
+    """Write 0xAA to Expander 0 (addr 0x08), read back from Expander 1 (addr 0x09)."""
+    
+    # 1. Start the 50MHz system clock (20ns period) in the background
+    cocotb.start_soon(Clock(dut.clk, 20, units="ns"))
+
+    dut._log.info("Resetting DUT")
+    dut.rst_n.value = 0
+    dut.ena.value = 1
+    # Initialize uio_in. The I2C module ignores ui_in main_sel.
+    dut.uio_in.value = 0 
+    await Timer(100, units="ns")
+    dut.rst_n.value = 1
+    await Timer(100, units="ns")
+    
+    # 2. Instantiate the I2C Master bus (1MHz clock speed to safely clear the 50MHz internal sampling)
+    i2c = I2CBus(dut, scl_half_period_ns=500)
+    await i2c.update()
+    await Timer(1, units="us")
+    
+    # ==========================================
+    # 3. WRITE PHASE (To Expander 0 -> Address 0x08)
+    # ==========================================
+    dut._log.info("Sending I2C START (Write Phase)")
+    await i2c.start()
+    
+    # I2C Slave Address format: 7-bit address + 1-bit W/R (Write = 0)
+    addr_write = (0x08 << 1) | 0
+    ack = await i2c.write_byte(addr_write)
+    assert ack == 0, f"Expander 0 (0x08) did NOT ACK its address! Got {ack}"
+    
+    dut._log.info("Writing data 0xAA to Expander 0...")
+    ack = await i2c.write_byte(0xAA)
+    assert ack == 0, f"Expander 0 did NOT ACK data byte 0xAA! Got {ack}"
+    
+    await i2c.stop()
+    
+    # Wait for the internal 8-bit register to latch the data (needs system clock edges)
+    await Timer(100, units="ns")
+    
+    # ==========================================
+    # 4. READ PHASE (From Expander 1 -> Address 0x09)
+    # ==========================================
+    dut._log.info("Sending I2C START (Read Phase)")
+    await i2c.start()
+    
+    # I2C Slave Address format: 7-bit address + 1-bit W/R (Read = 1)
+    addr_read = (0x09 << 1) | 1
+    ack = await i2c.write_byte(addr_read)
+    assert ack == 0, f"Expander 1 (0x09) did NOT ACK its address! Got {ack}"
+    
+    dut._log.info("Reading data from Expander 1...")
+    # Master sends NACK (ack=False) after the first byte to signal end of read
+    read_val = await i2c.read_byte(ack=False) 
+    
+    await i2c.stop()
+    
+    # ==========================================
+    # 5. VERIFICATION
+    # ==========================================
+    dut._log.info(f"Loopback read value: {hex(read_val)}")
+    assert read_val == 0xAA, f"Loopback Failed! Expected 0xAA, got {hex(read_val)}"
+    
+    dut._log.info("I2C Expander Loopback test - PASSED!")
