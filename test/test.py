@@ -372,7 +372,7 @@ async def test_i2c_expander_loopback(dut):
     """Write 0xAA to Expander 0 (addr 0x08), read back from Expander 1 (addr 0x09)."""
     
     # 1. Start the 50MHz system clock (20ns period) in the background
-    cocotb.start_soon(Clock(dut.clk, 20, units="ns"))
+    cocotb.start_soon(Clock(dut.clk, 20, units="ns").start())
 
     dut._log.info("Resetting DUT")
     dut.rst_n.value = 0
